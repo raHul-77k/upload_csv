@@ -1,0 +1,35 @@
+{% extends 'templates/base.html' %}
+
+{% block content %}
+  <form method="post" enctype="multipart/form-data">
+    <h2>Upload CSV file</h2>
+    {% csrf_token %}
+    <div class="form-group">
+      {{ form.file }}
+      <small class="form-text text-muted">{{ filename }}</small>
+    </div>
+    <button type="submit" class="btn btn-primary">Upload</button>
+  </form>
+
+  <style>
+
+    form {
+      margin: 0 auto;
+      max-width: 400px;
+    }
+
+    input[type="file"] {
+      font-size: 1.2rem;
+      padding: 0.5rem 1rem;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    input[type="file"]:hover {
+      background-color: #0062cc;
+    }
+  </style>
+{% endblock %}
