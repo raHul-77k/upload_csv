@@ -1,7 +1,6 @@
-import csv
-from datetime import datetime
+import pandas as pd
 from django.shortcuts import render, redirect
-from io import TextIOWrapper
+from datetime import datetime
 from .models import Transaction
 from .forms import CSVUploadForm
 
@@ -11,56 +10,50 @@ def upload_csv(request):
     if request.method == 'POST':
         form = CSVUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            # Parse the uploaded CSV file
+            # Parse the uploaded CSV file using pandas
             csv_file = request.FILES['file']
-            data = csv.reader(TextIOWrapper(csv_file.file, encoding='iso-8859-1'))
-            next(data) # Skip the header row
-            
+            df = pd.read_csv(csv_file, encoding='iso-8859-1')
+
+            # Select only the desired columns
+            df = df[['Invoice ID', 'Product line', 'Unit price', 'Quantity', 'Tax 5%', 'Total', 'Date', 'Time']][:60]
+
+            # Rename the columns to match the Transaction model fields
+            df = df.rename(columns={
+                'Invoice ID': 'invoice_id',
+                'Product line': 'product_line',
+                'Unit price': 'unit_price',
+                'Quantity': 'quantity',
+                'Tax 5%': 'tax',
+                'Total': 'total',
+                'Date': 'date',
+                'Time': 'time',
+            })
+
+            # Convert date and time columns to datetime objects
+            df['date'] = pd.to_datetime(df['date']).dt.date
+            df['time'] = pd.to_datetime(df['time'], format='%H:%M').dt.time
+
             # Save the new transactions to the database
-            count = 0
-            for row in data:
-                if count < 10:
-                    invoice_id = row[0]
-                    product_line = row[5]
-                    unit_price = float(row[6])
-                    quantity = int(row[7])
-                    tax = float(row[8])
-                    total = float(row[9])
-                    date = datetime.strptime(row[10], '%m/%d/%Y').date()
-                    time = datetime.strptime(row[11], '%H:%M').time()
-                    
-                    # Check if transaction already exists in the database
-                    if not Transaction.objects.filter(invoice_id=invoice_id).exists():
-                        # Save only these required fields to the database
-                        Transaction.objects.create(
-                        invoice_id=invoice_id,
-                        product_line=product_line,
-                        unit_price=unit_price,
-                        quantity=quantity,
-                        tax=tax,
-                        total=total,
-                        date=date,
-                        time=time,
-                        )
-                        count += 1
-                    
+            df_dict = df.to_dict('records')
+            Transaction.objects.bulk_create([
+                Transaction(
+                    invoice_id=row['invoice_id'],
+                    product_line=row['product_line'],
+                    unit_price=row['unit_price'],
+                    quantity=row['quantity'],
+                    tax=row['tax'],
+                    total=row['total'],
+                    date=row['date'],
+                    time=row['time']
+                ) for row in df.to_dict('records') if 'quantity' in row
+            ])
+
             # Retrieve the transactions for Health and Beauty product line
             transactions = Transaction.objects.filter(product_line='Health and beauty')
-            
+
             # Pass the transactions to the template for rendering
             return render(request, 'templates/transactions.html', {'transactions': transactions})
     else:
         form = CSVUploadForm()
-    
+
     return render(request, 'templates/upload.html', {'form': form})
-
-
-# Checking database data 
-
-from django.http import JsonResponse
-from .models import Transaction
-
-def view_transactions(request):
-    transactions = Transaction.objects.all()
-    data = {'transactions': list(transactions.values())}
-    return JsonResponse(data)
